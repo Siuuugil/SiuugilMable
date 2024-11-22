@@ -1,11 +1,5 @@
-#include <windows.h>
-#include <windowsx.h>
-#include <commctrl.h>
-#include <vector>
-#include <string>
-#include <cstdlib>
-#include <ctime>
-#include <functional>
+#include "IngameMain.h"
+
 
 
 #define MAX_LOADSTRING 100
@@ -36,6 +30,16 @@ struct Player {
     int PrisonTurn; // 감옥 
 };
 
+struct Bank {
+    int bank_money; // 은행 잔고 
+    int warrant; // 담보 대출 
+    COLORREF color; //구역 색 
+    int bank_owner; // 은행이 소유한 땅 
+};
+
+void Loan() {
+    
+}
 // 맵 구조 
 std::vector<Zone> zones = {
     // 위쪽 줄 (왼쪽에서 오른쪽으로)
@@ -91,8 +95,12 @@ std::vector<Player> players = {
     {0, 10000, RGB(255, 0, 0),0},  // 플레이어 1
     {0, 10000, RGB(0, 0, 255),0}   // 플레이어 2
 };
+std::vector<Bank>banks = {
+    {1000000,0,RGB(0, 255, 0),0}
+};
 
 int currentPlayer = 0;  // 현재 턴인 플레이어
+int currentBank = 0;
 
 // 툴팁 핸들
 HWND hToolTip;
@@ -144,10 +152,10 @@ HWND CreateIngameWindow(HWND hParentWnd)
         hInst,
         nullptr);
 
-    if (!hIngameWnd)
+    /*if (!hIngameWnd)
     {
         MessageBox(hParentWnd, L"윈도우 생성에 실패하였습니다.", L"Error", MB_OK | MB_ICONERROR);
-    }
+    }*/
 
     return hIngameWnd;
 }
@@ -230,10 +238,10 @@ void movePlayer(int playerIndex, int steps) {
         MessageBox(NULL, L"시작 지점으로 돌아갑니다!", L"Go! Start", MB_OK);
     }
 
-    // 현재 위치 정보 출력 (디버깅용)
-    WCHAR debugMessage[100];
-    swprintf_s(debugMessage, L"플레이어 %d가 %s에 도착했습니다.", playerIndex + 1, zones[currentPosition].name);
-    MessageBox(NULL, debugMessage, L"이동 정보", MB_OK);
+    // 현재 위치 정보 출력
+    WCHAR debug[100];
+    swprintf_s(debug, L"플레이어 %d가 %s에 도착했습니다.", playerIndex + 1, zones[currentPosition].name);
+    MessageBox(NULL, debug, L"이동 정보", MB_OK);
 }
 
 
@@ -280,11 +288,15 @@ void resetGame() {
 LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static TOOLINFO ti;
+    RECT WindowRect;
 
     switch (message)
     {
     case WM_CREATE:
-    {
+    {   
+        GetClientRect(hWnd, &WindowRect);
+        HWND LoanClickButton = CreateWindow(L"BUTTON", L"대출 실행", WS_CHILD | WS_VISIBLE, 800,300,100,50, hWnd, (HMENU)1, hInst, NULL);
+            
         InitCommonControls();
         // 툴팁 생성
         hToolTip = CreateWindowEx(0, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
@@ -315,7 +327,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-
+        GetClientRect(hWnd, &WindowRect);
         // 맵 그리기
         for (size_t i = 0; i < zones.size(); ++i)
         {
@@ -353,7 +365,13 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         // 현재 플레이어의 턴 표시
         WCHAR turnText[50];
         swprintf_s(turnText, L"플레이어 %d'의 차례 입니다. (Money: $%d)", currentPlayer + 1, players[currentPlayer].money);
-        TextOut(hdc, 10, mapSize * squareSize + 10, turnText, lstrlenW(turnText));
+        TextOut(hdc, WindowRect.left+100, WindowRect.top+400, turnText, lstrlenW(turnText));
+
+        // 은행 
+        WCHAR bankText[100];
+        swprintf_s(bankText, L"안녕하세요? 산와머니 입니다. (은행 잔고: $%d)",banks[currentBank].bank_money);
+        TextOut(hdc, WindowRect.left + 800, WindowRect.top + 100, bankText, lstrlenW(bankText));
+        
 
         EndPaint(hWnd, &ps);
     }

@@ -134,7 +134,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_LBUTTONDOWN:
     {
         // 마우스 클릭 시 간단한 메시지 박스를 띄웁니다.
-        MessageBox(hWnd, L"paren Window Clicked!", L"Info", MB_OK | MB_ICONINFORMATION);
+        //MessageBox(hWnd, L"paren Window Clicked!", L"Info", MB_OK | MB_ICONINFORMATION);
     }
     break;
     case WM_COMMAND:
