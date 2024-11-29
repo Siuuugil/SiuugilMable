@@ -1,8 +1,5 @@
-﻿// SugilMable.cpp
-#include "SugilMable.h"
-//#include "IngameMain.h"
-//#include <vector>
-//#include <string>
+﻿#include "SugilMable.h"
+
 
 #define MAX_LOADSTRING 100
 
@@ -11,14 +8,14 @@ HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 HWND hStartButton, hCreditsButton;
-bool gameStarted = false;
+bool GameStart = false;
 
 // 함수 선언
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
-void CreateStartScreen(HWND hWnd);
+void CreateButtonWindow(HWND hWnd);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -90,7 +87,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     return TRUE;
 }
 
-void CreateStartScreen(HWND hWnd)
+void CreateButtonWindow(HWND hWnd)
 {
     RECT clientRect;
     GetClientRect(hWnd, &clientRect);
@@ -117,7 +114,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     switch (message)
     {
     case WM_CREATE:
-        CreateStartScreen(hWnd);
+        CreateButtonWindow(hWnd);
         break;
 
     case WM_COMMAND:
@@ -125,16 +122,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         int wmId = LOWORD(wParam);
         switch (wmId)
         {
-        case 1001: // 게임 시작 버튼
-            gameStarted = true;
+        case 1001: // 게임 시작
+            GameStart = true;
             ShowWindow(hStartButton, SW_HIDE);
             ShowWindow(hCreditsButton, SW_HIDE);
             MyRegisterIngameClass(hInst);
             CreateIngameWindow(hWnd);
             InvalidateRect(hWnd, NULL, TRUE);
             break;
-        case 1002: // 크레딧 버튼
-            MessageBox(hWnd, L"학번: [202307052]\n이름: [김수길]\n과목: [VC++]", L"크레딧", MB_OK | MB_ICONINFORMATION);
+        case 1002: // 크레딧
+            MessageBox(hWnd, L"학번: 202307052\n이름: 김수길\n과목: VC++", L"만든이", MB_OK | MB_ICONINFORMATION);
             break;
         case IDM_ABOUT:
             DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
@@ -153,15 +150,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
 
-        if (!gameStarted)
+        if (!GameStart)
         {
             RECT clientRect;
             GetClientRect(hWnd, &clientRect);
-            SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(0, 0, 0));
 
-            HFONT hFont = CreateFont(48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
-                CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Arial");
+            HFONT hFont = CreateFont(200, 0, 0, 0, 0, 0, 0, 0, HANGEUL_CHARSET, 3, 2, 1,
+                VARIABLE_PITCH | FF_ROMAN, L"궁서");
             SelectObject(hdc, hFont);
 
             RECT textRect = clientRect;
