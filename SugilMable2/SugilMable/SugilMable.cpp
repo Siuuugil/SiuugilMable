@@ -118,6 +118,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
        
         break;
 
+    case WM_SIZE:
+    {
+        int width = LOWORD(lParam);
+        int height = HIWORD(lParam);
+
+        SetWindowPos(hStartButton, NULL,
+            (width - 200) / 2,
+            (height - 50) / 2, 
+            0, 0,  
+            SWP_NOZORDER | SWP_NOSIZE);
+      
+        SetWindowPos(hCreditsButton, NULL,
+            (width - 200) / 2,  
+            ((height - 120) / 2) + 150, 
+            0, 0,  
+            SWP_NOZORDER | SWP_NOSIZE);
+
+        return 0;
+    }
+
  
     case WM_COMMAND:
     {

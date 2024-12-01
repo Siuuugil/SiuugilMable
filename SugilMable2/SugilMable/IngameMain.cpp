@@ -7,11 +7,32 @@ HWND hToolTip;
 HWND hIngameWnd = nullptr;
 WCHAR messageBuffer[256] = L"";
 WCHAR messageBuffer2[256] = L"";
-const int mapSize = 20;
-const int squareSize = 70;
-const int gapSize = 5;
-int currentPlayer = 0;
-int currentBank = 0;
+const int squareSize = 70; // 맵 사이즈 
+int currentPlayer = 0; //현재 플레이어
+int currentBank = 0; //현재 선택된 은행 <- 플레이어1, 2 각각의 은행 업무 구분을 위해 
+HBITMAP hBackgroundBitmap = NULL;
+
+
+//플레이어1 정보 
+UserInformation player1Info = {
+    {750, 50, 950, 300},
+    L"플레이어 1 정보",
+    RGB(255, 107, 107),
+    RGB(0, 0, 0)
+};
+
+//플레이어2 정보 
+UserInformation player2Info = {
+    {960, 50, 1160, 300},
+    L"플레이어 2 정보",
+    RGB(100, 149, 237),
+    RGB(0, 0, 0)
+};
+//플레이어1,2의 말판 
+std::vector<Player> players = {
+    {0, 10000, RGB(255, 107, 107), 0, 0, 0, false},
+    {0, 10000, RGB(100, 149, 237), 0, 0, 0, false}
+};
 
 //은행 구역 
 BankZone sugilBank = {
@@ -20,30 +41,12 @@ BankZone sugilBank = {
     RGB(240, 240, 240),
     RGB(0, 0, 0)
 };
-//유저1 정보 
-UserInformation player1Info = {
-    {750, 50, 950, 300},
-    L"플레이어 1 정보",
-    RGB(240, 240, 240),
-    RGB(0, 0, 0)
-};
 
-//유저2 정보 
-UserInformation player2Info = {
-    {960, 50, 1160, 300},
-    L"플레이어 2 정보",
-    RGB(240, 240, 240),
-    RGB(0, 0, 0)
-};
-//유저 1, 2 초기값
-std::vector<Player> players = {
-    {0, 10000, RGB(255, 0, 0), 0, 0, 0, false},
-    {0, 10000, RGB(0, 0, 255), 0, 0, 0, false}
-};
 // 은행 초기값
 std::vector<Bank> banks = {
     {1000000, 0, RGB(0, 255, 0), 0}
 };
+
 // 맵 
 std::vector<Zone> zones = {
     // 위쪽 줄 (왼쪽에서 오른쪽으로) - 연한 파란색
@@ -140,61 +143,6 @@ int rollDice() {
     return result;
 }
 
-//랜덤 구역 효과
-void RandomEffect(int playerIndex) {
-    std::vector<std::pair<LPCWSTR, std::function<void()>>> effects = {
-        {L"보너스($500) 지급", []() { players[currentPlayer].money += 500; }},
-        {L"보너스($2000) 지급", []() { players[currentPlayer].money += 2000; }},
-        {L"보너스($5000) 지급", []() { players[currentPlayer].money += 5000; }},
-        {L"벌금($500) 지불", []() { players[currentPlayer].money -= 500; }},
-        {L"벌금($800) 지불", []() { players[currentPlayer].money -= 800; }},
-        {L"벌금($1200) 지불", []() { players[currentPlayer].money -= 1200; }},
-        {L"앞으로 이동", []() { movePlayer(currentPlayer, 3); }},
-        {L"뒤로 이동", []() { movePlayer(currentPlayer, -2); }},
-        {L"북한으로 이동", []() {
-            for (size_t i = 0; i < zones.size(); ++i) {
-                if (wcscmp(zones[i].name, L"북한") == 0) {
-                    players[currentPlayer].position = i;
-                    players[currentPlayer].PrisonTurn = 3;
-                    break;
-                }
-            }
-        }},
-        {L"모든 플레이어에게 $500 지불", []() {
-            for (size_t i = 0; i < players.size(); ++i) {
-                if (i != currentPlayer) {
-                    players[currentPlayer].money -= 500;
-                    players[i].money += 500;
-                }
-            }
-        }},
-        {L"가장 비싼 소유 부동산 매각", []() {
-            if (!players[currentPlayer].ownedProperties.empty()) {
-                auto maxProperty = std::max_element(players[currentPlayer].ownedProperties.begin(),
-                    players[currentPlayer].ownedProperties.end(),
-                    [](int a, int b) { return zones[a].price < zones[b].price; });
-                int propertyIndex = *maxProperty;
-                players[currentPlayer].money += zones[propertyIndex].price;
-                zones[propertyIndex].owner = -1;
-                players[currentPlayer].ownedProperties.erase(maxProperty);
-                updateMessage(L"%s를 매각하고 $%d를 받았습니다.", zones[propertyIndex].name, zones[propertyIndex].price);
-            }
-        }},
-        {L"무작위 플레이어와 위치 교환", []() {
-            int otherPlayer = (currentPlayer + 1) % players.size();
-            std::swap(players[currentPlayer].position, players[otherPlayer].position);
-            updateMessage(L"플레이어 %d와 위치를 교환했습니다.", otherPlayer + 1);
-        }},
-        {L"다음 3턴 동안 임대료 면제", []() {
-            updateMessage(L"다음 3턴 동안 임대료가 면제됩니다.");
-        }}
-    };
-
-    int randomEffect = rand() % effects.size();
-    effects[randomEffect].second();
-    updateMessage(L"랜덤 효과: %s", effects[randomEffect].first);
-}
-
 //플레이어 이동 관련 
 void movePlayer(int playerIndex, int steps) {
     if (players[playerIndex].PrisonTurn > 0) {
@@ -202,7 +150,6 @@ void movePlayer(int playerIndex, int steps) {
         updateMessage(L"플레이어 %d는 아직 북한에 있습니다. 남은 턴: %d", playerIndex + 1, players[playerIndex].PrisonTurn);
         return;
     }
-
     int totalZones = zones.size();
     int currentPosition = players[playerIndex].position;
     bool passedStart = false;
@@ -230,7 +177,7 @@ void movePlayer(int playerIndex, int steps) {
         RandomEffect(playerIndex);
     }
     else if (wcscmp(zones[currentPosition].name, L"비행기") == 0) {
-        int destination = chooseDestination(playerIndex);
+        int destination = RandomDestination(playerIndex);
         players[playerIndex].position = destination;
         updateMessage(L"플레이어 %d가 비행기를 타고 %s로 이동했습니다.", playerIndex + 1, zones[destination].name);
     }
@@ -238,22 +185,116 @@ void movePlayer(int playerIndex, int steps) {
     updateMessage(L"플레이어 %d가 %s에 도착했습니다.", playerIndex + 1, zones[currentPosition].name);
 }
 
-//비행기 구역 이벤트 
-int chooseDestination(int playerIndex) {
-    std::vector<int> destinations;
+//랜덤 구역 효과  
+//랜덤 효과들을 vector(동적 배열 컨테이너)에 저장. 
+//pair : 두 개의 값을 하나의 단위로 묶음. 
+//LPCWSTR : 유니코드 문자열을 가리키는 포인터(효과의 설명 L"...")
+//function<void()> : void() 함수를 저장(효과를 실행하는 함수)
+//즉, std::vector<std::pair<LPCWSTR, std::function<void()>>>는  효과의 설명과 그 효과를 실행하는 함수를 묶어 동적 배열 컨테이너에 저장. 
+//players[currentPlayer].money : 현재 플레이어가 가지고 있는 돈
+//movePlayer(currentPlayer) : movePlayer() <- 말판 이동을 위한 함수. 즉 현재 플레이어의 위치를 n칸 만큼 옮김 
+//for(size_t ....) size_t : 부호 없는 정수 타입. i 가 zones의 크기보다 작은 동안 계속 반복 
+
+
+void RandomEffect(int playerIndex) {
+    std::vector<std::pair<LPCWSTR, std::function<void()>>> effects = {
+        {L"보너스($500) 지급", []() { players[currentPlayer].money += 500; }},
+        {L"보너스($2000) 지급", []() { players[currentPlayer].money += 2000; }},
+        {L"보너스($5000) 지급", []() { players[currentPlayer].money += 5000; }},
+        {L"벌금($500) 지불", []() { players[currentPlayer].money -= 500; }},
+        {L"벌금($800) 지불", []() { players[currentPlayer].money -= 800; }},
+        {L"벌금($1200) 지불", []() { players[currentPlayer].money -= 1200; }},
+        {L"앞으로 이동", []() { movePlayer(currentPlayer, 3); }},
+        {L"뒤로 이동", []() { movePlayer(currentPlayer, -2); }},
+        {L"북한으로 이동", []() {
+            for (size_t i = 0; i < zones.size(); ++i) {
+                if (wcscmp(zones[i].name, L"북한") == 0) {
+                    players[currentPlayer].position = i;
+                    players[currentPlayer].PrisonTurn = 3;
+                    break;
+                }
+            }
+        }},
+        {L"모든 플레이어에게 $500 지불", []() {
+            int otherPlayersCount = players.size() - 1;
+            players[currentPlayer].money -= 500 * otherPlayersCount;
+            for (size_t i = 0; i < players.size(); ++i) {
+                if (i != currentPlayer) {
+                 players[i].money += 500;
+                }
+            }
+        }},
+     {L"가장 비싼 소유 부동산 매각", []() {
+            if (!players[currentPlayer].ownedProperties.empty()) {
+                int maxPrice = 0;
+                int maxPriceIndex = -1;
+
+                for (int i = 0; i < players[currentPlayer].ownedProperties.size(); i++) {
+                    int propertyIndex = players[currentPlayer].ownedProperties[i];
+                    if (zones[propertyIndex].price > maxPrice) {
+                        maxPrice = zones[propertyIndex].price;
+                        maxPriceIndex = propertyIndex;
+                    }
+                }
+                if (maxPriceIndex != -1) {
+                    players[currentPlayer].money += zones[maxPriceIndex].price;
+                    zones[maxPriceIndex].owner = -1;
+                    for (int i = 0; i < players[currentPlayer].ownedProperties.size(); i++) {
+                        if (players[currentPlayer].ownedProperties[i] == maxPriceIndex) {
+                            players[currentPlayer].ownedProperties.erase(players[currentPlayer].ownedProperties.begin() + i);
+                            break;
+                        }
+                    }
+                    updateMessage(L"%s를 매각하고 $%d를 받았습니다.", zones[maxPriceIndex].name, zones[maxPriceIndex].price);
+                }
+            }
+        }},
+
+        {L"무작위 플레이어와 위치 교환", []() {
+            int otherPlayer = (currentPlayer + 1) % players.size();
+            std::swap(players[currentPlayer].position, players[otherPlayer].position);
+            updateMessage(L"플레이어 %d와 위치를 교환했습니다.", otherPlayer + 1);
+        }},
+    };
+
+    int randomEffect = rand() % effects.size();
+    effects[randomEffect].second();
+    updateMessage(L"랜덤 효과: %s", effects[randomEffect].first);
+}
+
+
+
+//비행기 구역 효과 
+int RandomDestination(int playerIndex) {
+    std::vector<int> emptyDestinations;
     for (size_t i = 0; i < zones.size(); ++i) {
-        if (wcscmp(zones[i].name, L"비행기") != 0 && wcscmp(zones[i].name, L"북한") != 0) {
-            destinations.push_back(i);
+        // 비행기와 북한을 제외하고, 소유자가 없는(-1) 땅만 선택
+        if (wcscmp(zones[i].name, L"비행기") != 0 &&
+            wcscmp(zones[i].name, L"북한") != 0 &&
+            zones[i].owner == -1 &&
+            zones[i].price > 0) {  // 가격이 있는 땅만 선택 (특수 구역 제외)
+            emptyDestinations.push_back(i);
         }
     }
 
-    WCHAR message[256];
-    swprintf_s(message, L"플레이어 %d, 목적지를 선택하세요:", playerIndex + 1);
-    int choice = MessageBox(hIngameWnd, message, L"목적지 선택", MB_OK);
+    // 비어있는 땅이 없는 경우
+    if (emptyDestinations.empty()) {
+        // 모든 일반 땅을 대상으로 다시 선택
+        for (size_t i = 0; i < zones.size(); ++i) {
+            if (wcscmp(zones[i].name, L"비행기") != 0 &&
+                wcscmp(zones[i].name, L"북한") != 0 &&
+                zones[i].price > 0) {
+                emptyDestinations.push_back(i);
+            }
+        }
+    }
 
-    // 실제 게임에서는 여기에 사용자 입력을 받는 로직을 구현해야 합니다.
-    // 이 예제에서는 간단히 랜덤으로 목적지를 선택합니다.
-    return destinations[rand() % destinations.size()];
+    // 여전히 목적지가 없다면 (모든 땅이 특수 구역인 경우), 시작 지점으로 이동
+    if (emptyDestinations.empty()) {
+        return 0;  // 시작 지점의 인덱스 (보통 0)
+    }
+
+    return emptyDestinations[rand() % emptyDestinations.size()];
 }
 
 // 구매 관련 이벤트 
@@ -277,23 +318,25 @@ void buyProperty(int playerIndex, int zoneIndex) {
     }
 }
 
-//  
+
+// 플레이어의 총 부동산 가치
 int calculatePropertyValue(int playerIndex) {
     int totalValue = 0;
-    for (int propertyIndex : players[playerIndex].ownedProperties) {
-        totalValue += zones[propertyIndex].price;
+    for (int i = 0; i < players[playerIndex].ownedProperties.size(); i++) {
+        int propertyIndex = players[playerIndex].ownedProperties[i];
+        totalValue = totalValue + zones[propertyIndex].price;
     }
     return totalValue;
 }
 
-// 게임 오버 이벤트  
+// 게임 오버
 void checkGameOver(HWND hWnd) {
-    WCHAR winbuffer[256];
+    WCHAR winnerbuffer[256];
     for (size_t i = 0; i < players.size(); ++i) {
         int totalAssets = players[i].money + calculatePropertyValue(i);
         if (totalAssets >= 30000) {
-            swprintf_s(winbuffer, L"플레이어 %d가 총 자산 $%d로 승리했습니다!", i + 1, totalAssets);
-            MessageBox(hIngameWnd, winbuffer, L"승리!", MB_OK);
+            swprintf_s(winnerbuffer, L"플레이어 %d가 총 자산 $%d로 승리했습니다!", i + 1, totalAssets);
+            MessageBox(hIngameWnd, winnerbuffer, L"승리!", MB_OK);
             resetGame();
             InvalidateRect(hWnd, NULL, TRUE);
             return;
@@ -301,33 +344,145 @@ void checkGameOver(HWND hWnd) {
 
         if (players[i].money < 0) {
             int winner = (i + 1) % players.size();
-            swprintf_s(winbuffer, L"플레이어 %d가 파산했습니다. 플레이어 %d 승리!", i + 1, winner + 1);
-            MessageBox(hIngameWnd, winbuffer, L"승리!", MB_OK);
+            swprintf_s(winnerbuffer, L"플레이어 %d가 파산했습니다. 플레이어 %d 승리!", i + 1, winner + 1);
+            MessageBox(hIngameWnd, winnerbuffer, L"승리!", MB_OK);
             resetGame();
             InvalidateRect(hWnd, NULL, TRUE);
             return;
         }
     }
+} 
+// 게임 리셋
+void resetGame() {
+    for (int i = 0; i < players.size(); i++) {
+        players[i].position = 0;
+        players[i].money = 10000;
+        players[i].PrisonTurn = 0;
+        players[i].loanAmount = 0;
+        players[i].loanTerm = 0;
+        players[i].isInDebt = false;
+        players[i].collateral = 0;
+        players[i].ownedProperties.clear();
+    }
+    for (int i = 0; i < zones.size(); i++) {
+        zones[i].owner = -1;
+    }
+    currentPlayer = 0;
 }
 
-// 게임 리셋 함수 
-void resetGame() {
-    for (auto& player : players) {
-        player.position = 0;
-        player.money = 10000;
-        player.PrisonTurn = 0;
-        player.loanAmount = 0;
-        player.loanTerm = 0;
-        player.isInDebt = false;
-        player.collateral = 0;
-        player.ownedProperties.clear();
+// 대출 실행
+void executeLoan(int playerIndex) {
+    const int LOAN_AMOUNT = 3000;
+    const int LOAN_TERM = 5;
+    const int LOAN_THRESHOLD = 2000;
+    if (players[playerIndex].money <= LOAN_THRESHOLD) {
+        if (players[playerIndex].loanAmount == 0) {
+            players[playerIndex].money += LOAN_AMOUNT;
+            players[playerIndex].loanAmount = LOAN_AMOUNT;
+            players[playerIndex].loanTerm = LOAN_TERM;
+            players[playerIndex].isInDebt = false;
+            updateMessage(L"플레이어 %d가 $%d을 대출받았습니다. 만기: %d턴", playerIndex + 1, LOAN_AMOUNT, LOAN_TERM);
+        }
+        else {
+            updateMessage(L"플레이어 %d는 이미 대출이 있습니다.", playerIndex + 1);
+        }
     }
-
-    for (auto& zone : zones) {
-        zone.owner = -1;
+    else {
+        updateMessage(L"플레이어 %d의 보유 금액이 $%d를 초과했습니다.", playerIndex + 1, LOAN_THRESHOLD);
     }
+}
+//대출 상환
+void repayLoan(int playerIndex) {
+    if (players[playerIndex].loanAmount > 0) {
+        if (players[playerIndex].money >= players[playerIndex].loanAmount) {
+            players[playerIndex].money -= players[playerIndex].loanAmount;
+            updateMessage(L"플레이어 %d가 $%d의 대출금을 상환했습니다.", playerIndex + 1, players[playerIndex].loanAmount);
+            players[playerIndex].loanAmount = 0;
+            players[playerIndex].loanTerm = 0;
+            players[playerIndex].isInDebt = false;
+        }
+        else {
+            updateMessage(L"플레이어 %d의 돈이 부족하여 대출금을 상환할 수 없습니다.", playerIndex + 1);
+        }
+    }
+    else {
+        updateMessage(L"플레이어 %d는 상환할 대출이 없습니다.", playerIndex + 1);
+    }
+}
 
-    currentPlayer = 0;
+//대출 상황
+void checkLoanStatus(int playerIndex) {
+    if (players[playerIndex].loanAmount > 0) {
+        players[playerIndex].loanTerm--;
+
+        if (players[playerIndex].loanTerm <= 0) {
+            players[playerIndex].isInDebt = true;
+            updateMessage(L"플레이어 %d가 대출금을 상환해야 합니다!", playerIndex + 1);
+
+            if (players[playerIndex].money >= players[playerIndex].loanAmount) {
+                players[playerIndex].money -= players[playerIndex].loanAmount;
+                updateMessage(L"플레이어 %d가 $%d의 대출금을 상환했습니다.", playerIndex + 1, players[playerIndex].loanAmount);
+                players[playerIndex].loanAmount = 0;
+                players[playerIndex].loanTerm = 0;
+                players[playerIndex].isInDebt = false;
+            }
+            else {
+                int mostExpensiveProperty = -1;
+                int highestPrice = 0;
+                for (int propertyIndex : players[playerIndex].ownedProperties) {
+                    if (zones[propertyIndex].price > highestPrice) {
+                        highestPrice = zones[propertyIndex].price;
+                        mostExpensiveProperty = propertyIndex;
+                    }
+                }
+
+                if (mostExpensiveProperty != -1) {
+                    zones[mostExpensiveProperty].owner = -1;
+                    players[playerIndex].ownedProperties.erase(
+                        std::remove(players[playerIndex].ownedProperties.begin(),
+                            players[playerIndex].ownedProperties.end(),
+                            mostExpensiveProperty),
+                        players[playerIndex].ownedProperties.end()
+                    );
+
+                    int remainingDebt = players[playerIndex].loanAmount - zones[mostExpensiveProperty].price;
+                    if (remainingDebt > 0) {
+                        players[playerIndex].loanAmount = remainingDebt;
+                        updateMessage(L"플레이어 %d의 %s(이)가 압류되었습니다. 남은 빚: $%d",
+                            playerIndex + 1, zones[mostExpensiveProperty].name, remainingDebt);
+                    }
+                    else {
+                        players[playerIndex].loanAmount = 0;
+                        players[playerIndex].isInDebt = false;
+                        updateMessage(L"플레이어 %d의 %s가 압류되어 모든 빚이 상환되었습니다.",
+                            playerIndex + 1, zones[mostExpensiveProperty].name);
+                    }
+                }
+                else {
+                    updateMessage(L"플레이어 %d는 압류할 부동산이 없습니다. 게임 오버!", playerIndex + 1);
+                    resetGame();
+                }
+            }
+
+            //대출 초기화
+            if (players[playerIndex].loanAmount <= 0) {
+                players[playerIndex].loanTerm = 0;
+                players[playerIndex].isInDebt = false;
+            }
+        }
+        else {
+            updateMessage(L"플레이어 %d의 대출 만기까지 %d턴 남았습니다.", playerIndex + 1, players[playerIndex].loanTerm);
+        }
+    }
+}
+
+//const WCHAR* format : 메시지의 형식을 지정하는 문자열, ... : 가변 인자(여러 개의 추가 인자를 받을 수 있음)
+//updateMessage의 내용들을 한 줄에 모두 담기 위해 사용. 
+void updateMessage(const WCHAR* format, ...) {
+    va_list args; // 가면 인자들을 처리하기 위한 특별한 변수 
+    va_start(args, format); //가변 인자 처리를 시작함. format의 다음에 오는 인자들을 처리할 준비
+    vswprintf_s(messageBuffer, 256, format, args); //문자열을 버퍼에 담고 출력 
+    va_end(args); //마무리 
 }
 
 LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -367,24 +522,8 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         HWND D_Button2 = CreateWindow(L"BUTTON", L"대출 실행", WS_CHILD | WS_VISIBLE, 1130, 300, 100, 50, hWnd, (HMENU)3, hInst, NULL);
         HWND H_Button2 = CreateWindow(L"BUTTON", L"대출 상환", WS_CHILD | WS_VISIBLE, 1260, 300, 100, 50, hWnd, (HMENU)4, hInst, NULL);
 
-        InitCommonControls();
-        hToolTip = CreateWindowEx(0, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
-            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hWnd, NULL, hInst, NULL);
-
-        SendMessage(hToolTip, TTM_SETMAXTIPWIDTH, 0, 300);
-
-        ZeroMemory(&ti, sizeof(ti));
-        ti.cbSize = sizeof(TOOLINFO);
-        ti.uFlags = TTF_SUBCLASS;
-        ti.hwnd = hWnd;
-        ti.hinst = hInst;
-        ti.uId = 0;
-        ti.lpszText = LPSTR_TEXTCALLBACK;
-        ti.rect.left = ti.rect.top = ti.rect.right = ti.rect.bottom = 0;
-
-        SendMessage(hToolTip, TTM_ADDTOOL, 0, (LPARAM)&ti);
-
-        srand(static_cast<unsigned int>(time(nullptr)));
+        
+    
     }
     break;
 
@@ -394,12 +533,63 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         HDC hdc = BeginPaint(hWnd, &ps);
         HBRUSH hBankBrush = CreateSolidBrush(sugilBank.backgroundColor);
         HPEN hBankPen = CreatePen(PS_SOLID, 2, sugilBank.borderColor);
-        const int messageX = 90;  
-        const int messageY1 = 200; 
-        const int messageY2 = 230; 
 
+        HBRUSH hBackgroundBrush = CreateSolidBrush(RGB(245, 245, 220));
+        RECT backclientRect;
+        GetClientRect(hWnd, &backclientRect);
+        FillRect(hdc, &backclientRect, hBackgroundBrush);
+        DeleteObject(hBackgroundBrush);
 
-        GetClientRect(hWnd, &WindowRect);
+        const int messageX = 90;
+        const int messageY1 = 200;
+        const int messageY2 = 230;
+        int guideX = 1200;
+        int guideY = 450;
+        int lineHeight = 25;
+
+        RECT clientRect2;
+        GetClientRect(hWnd, &clientRect2);
+
+        SetTextColor(hdc, RGB(0, 0, 0));
+        SetBkMode(hdc, TRANSPARENT);
+
+            hBackgroundBitmap = (HBITMAP)LoadImage(NULL, L"earth.jpg", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBackgroundBitmap);
+
+            BITMAP bm;
+            GetObject(hBackgroundBitmap, sizeof(bm), &bm);
+
+            RECT clientRect;
+            GetClientRect(hWnd, &clientRect);
+
+            StretchBlt(hdc, 0, 0, clientRect.right, clientRect.bottom,
+                hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+
+            SelectObject(hdcMem, hOldBitmap);
+            DeleteDC(hdcMem);
+        
+        WCHAR gameInstructions[][100] = {
+        L"게임 설명:",
+        L"클릭 : 주사위 굴리기",
+        L"자유여행 : 비어 있는 땅으로 랜덤 이동",
+        L"랜덤 : 모험을 즐기면서 알아가세요.",
+        L"북한 : 3턴 간 움직임 제한",
+        L"출발! : 월급 $2000 지급",
+        L"승리조건 :",
+        L"- 총 자산 $30000 이상",
+        L"- 상대 플레이어 총 자산 $0",
+        L"- 상대 플레이어 보유 금액 $0"
+        };
+
+        int instructionsCount = sizeof(gameInstructions) / sizeof(gameInstructions[0]);
+        for (int i = 0; i < instructionsCount; i++) {
+            TextOut(hdc,
+                guideX,
+                guideY + i * lineHeight,
+                gameInstructions[i],
+                lstrlenW(gameInstructions[i]));
+        }
 
         for (size_t i = 0; i < zones.size(); ++i)
         {
@@ -422,7 +612,6 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 swprintf_s(priceText, L"$%d", zones[i].price);
                 TextOut(hdc, zones[i].x1 + 5, zones[i].y2 - 20, priceText, lstrlenW(priceText));
             }
-
             DeleteObject(hZoneBrush);
         }
 
@@ -436,6 +625,8 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             DeleteObject(hBrush);
         }
 
+        RECT WindowRect;
+        GetClientRect(hWnd, &WindowRect);
         WCHAR turnText[50];
         swprintf_s(turnText, L"플레이어 %d의 차례입니다. (Money: $%d)", currentPlayer + 1, players[currentPlayer].money);
         TextOut(hdc, WindowRect.left + 100, WindowRect.top + 150, turnText, lstrlenW(turnText));
@@ -446,10 +637,10 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(0, 0, 0));
-        HFONT hBankFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT hInformationFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"맑은 고딕");
-        SelectObject(hdc, hBankFont);
+        SelectObject(hdc, hInformationFont);
         TextOut(hdc, sugilBank.rect.left + 20, sugilBank.rect.top - 30,
             sugilBank.name, lstrlenW(sugilBank.name));
 
@@ -468,8 +659,14 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             }
         }
 
+
+        HBRUSH hPlayer1Brush = CreateSolidBrush(player1Info.backgroundColor);
+        HPEN hPlayer1Pen = CreatePen(PS_SOLID, 2, player1Info.borderColor);
+        SelectObject(hdc, hPlayer1Brush);
+        SelectObject(hdc, hPlayer1Pen);
         Rectangle(hdc, player1Info.rect.left, player1Info.rect.top + 370,
             player1Info.rect.right, player1Info.rect.bottom + 370);
+        SetTextColor(hdc, player1Info.borderColor);
         TextOut(hdc, player1Info.rect.left + 10, player1Info.rect.top + 380,
             player1Info.name, lstrlenW(player1Info.name));
 
@@ -480,8 +677,14 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             TextOut(hdc, player1Info.rect.left + 10, player1Info.rect.top + 440 + (i * 20), p1Info[i], lstrlenW(p1Info[i]));
         }
 
+
+        HBRUSH hPlayer2Brush = CreateSolidBrush(player2Info.backgroundColor);
+        HPEN hPlayer2Pen = CreatePen(PS_SOLID, 2, player2Info.borderColor);
+        SelectObject(hdc, hPlayer2Brush);
+        SelectObject(hdc, hPlayer2Pen);
         Rectangle(hdc, player2Info.rect.left, player2Info.rect.top + 370,
             player2Info.rect.right, player2Info.rect.bottom + 370);
+        SetTextColor(hdc, player2Info.borderColor);
         TextOut(hdc, player2Info.rect.left + 10, player2Info.rect.top + 380,
             player2Info.name, lstrlenW(player2Info.name));
 
@@ -495,13 +698,19 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         TextOut(hdc, messageX, messageY1, messageBuffer, lstrlenW(messageBuffer));
         TextOut(hdc, messageX, messageY2, messageBuffer2, lstrlenW(messageBuffer2));
 
-        DeleteObject(hBankFont);
+        DeleteObject(hPlayer1Brush);
+        DeleteObject(hPlayer1Pen);
+        DeleteObject(hPlayer2Brush);
+        DeleteObject(hPlayer2Pen);
+        DeleteObject(hInformationFont);
         DeleteObject(hBankBrush);
         DeleteObject(hBankPen);
 
         EndPaint(hWnd, &ps);
     }
     break;
+
+
 
     case WM_LBUTTONDOWN:
     {
@@ -518,7 +727,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
             if (wcscmp(zones[currentZone].name, L"비행기") == 0)
             {
-                int destination = chooseDestination(currentPlayer);
+                int destination = RandomDestination(currentPlayer);
                 players[currentPlayer].position = destination;
                 updateMessage(L"플레이어 %d가 비행기를 타고 %s로 이동했습니다.", currentPlayer + 1, zones[destination].name);
                 InvalidateRect(hWnd, NULL, TRUE);
@@ -540,57 +749,15 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
         checkGameOver(hWnd);
         InvalidateRect(hWnd, NULL, TRUE);
-
         break;
-    }
-
-    case WM_MOUSEMOVE:
-    {
-        int xPos = GET_X_LPARAM(lParam);
-        int yPos = GET_Y_LPARAM(lParam);
-
-        for (size_t i = 0; i < zones.size(); ++i)
-        {
-            if (xPos >= zones[i].x1 && xPos < zones[i].x2 && yPos >= zones[i].y1 && yPos < zones[i].y2)
-            {
-                WCHAR tooltipText[100];
-                if (zones[i].price > 0) {
-                    swprintf_s(tooltipText, L"%s\n가격: $%d\n소유자: %s", zones[i].name, zones[i].price,
-                        (zones[i].owner == -1) ? L"없음" : (zones[i].owner == 0 ? L"플레이어 1" : L"플레이어 2"));
-                }
-                else {
-                    wcscpy_s(tooltipText, zones[i].name);
-                }
-                ti.lpszText = tooltipText;
-                ti.rect.left = zones[i].x1;
-                ti.rect.top = zones[i].y1;
-                ti.rect.right = zones[i].x2;
-                ti.rect.bottom = zones[i].y2;
-
-                SendMessage(hToolTip, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
-                SendMessage(hToolTip, TTM_NEWTOOLRECT, 0, (LPARAM)&ti);
-                return 0;
-            }
-        }
-
-        ti.rect.left = ti.rect.top = ti.rect.right = ti.rect.bottom = 0;
-        SendMessage(hToolTip, TTM_NEWTOOLRECT, 0, (LPARAM)&ti);
-    }
-    break;
-
-    case WM_NOTIFY:
-    {
-        LPNMHDR pnmh = (LPNMHDR)lParam;
-        if (pnmh->hwndFrom == hToolTip && pnmh->code == TTN_GETDISPINFO)
-        {
-            LPTOOLTIPTEXT lpttt = (LPTOOLTIPTEXT)lParam;
-            lpttt->hinst = hInst;
-            lpttt->lpszText = ti.lpszText;
-        }
     }
     break;
 
     case WM_DESTROY:
+        if (hBackgroundBitmap)
+        {
+            DeleteObject(hBackgroundBitmap);
+        }
         PostQuitMessage(0);
         break;
 
@@ -600,117 +767,6 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
     return 0;
 }
 
-void executeLoan(int playerIndex) {
-    const int LOAN_AMOUNT = 3000;
-    const int LOAN_TERM = 5;
-    const int LOAN_THRESHOLD = 2000;
-    if (players[playerIndex].money <= LOAN_THRESHOLD) {
-        if (players[playerIndex].loanAmount == 0) {
-            players[playerIndex].money += LOAN_AMOUNT;
-            players[playerIndex].loanAmount = LOAN_AMOUNT;
-            players[playerIndex].loanTerm = LOAN_TERM;
-            players[playerIndex].isInDebt = false;
-            updateMessage(L"플레이어 %d가 $%d을 대출받았습니다. 만기: %d턴", playerIndex + 1, LOAN_AMOUNT, LOAN_TERM);
-        }
-        else {
-            updateMessage(L"플레이어 %d는 이미 대출이 있습니다.", playerIndex + 1);
-        }
-    }
-    else {
-        updateMessage(L"플레이어 %d의 보유 금액이 $%d를 초과했습니다.", playerIndex + 1, LOAN_THRESHOLD);
-    }
-}
 
-void repayLoan(int playerIndex) {
-    if (players[playerIndex].loanAmount > 0) {
-        if (players[playerIndex].money >= players[playerIndex].loanAmount) {
-            players[playerIndex].money -= players[playerIndex].loanAmount;
-            updateMessage(L"플레이어 %d가 $%d의 대출금을 상환했습니다.", playerIndex + 1, players[playerIndex].loanAmount);
-            players[playerIndex].loanAmount = 0;
-            players[playerIndex].loanTerm = 0;
-            players[playerIndex].isInDebt = false;
-        }
-        else {
-            updateMessage(L"플레이어 %d의 돈이 부족하여 대출금을 상환할 수 없습니다.", playerIndex + 1);
-        }
-    }
-    else {
-        updateMessage(L"플레이어 %d는 상환할 대출이 없습니다.", playerIndex + 1);
-    }
-}
 
-void updateMessage(const WCHAR* format, ...) {
-    va_list args;
-    va_start(args, format);
-    vswprintf_s(messageBuffer, 256, format, args);
-    va_end(args);
-    wprintf(L"\n");
-}
-
-void checkLoanStatus(int playerIndex) {
-    if (players[playerIndex].loanAmount > 0) {
-        players[playerIndex].loanTerm--;
-
-        if (players[playerIndex].loanTerm <= 0) {
-            players[playerIndex].isInDebt = true;
-            updateMessage(L"플레이어 %d가 대출금을 상환해야 합니다!", playerIndex + 1);
-
-            if (players[playerIndex].money >= players[playerIndex].loanAmount) {
-                // 대출금을 상환할 수 있는 경우
-                players[playerIndex].money -= players[playerIndex].loanAmount;
-                updateMessage(L"플레이어 %d가 $%d의 대출금을 상환했습니다.", playerIndex + 1, players[playerIndex].loanAmount);
-                players[playerIndex].loanAmount = 0;
-                players[playerIndex].loanTerm = 0;
-                players[playerIndex].isInDebt = false;
-            }
-            else {
-                // 대출금을 상환할 수 없는 경우, 자산 압류 로직 실행
-                int mostExpensiveProperty = -1;
-                int highestPrice = 0;
-                for (int propertyIndex : players[playerIndex].ownedProperties) {
-                    if (zones[propertyIndex].price > highestPrice) {
-                        highestPrice = zones[propertyIndex].price;
-                        mostExpensiveProperty = propertyIndex;
-                    }
-                }
-
-                if (mostExpensiveProperty != -1) {
-                    zones[mostExpensiveProperty].owner = -1;
-                    players[playerIndex].ownedProperties.erase(
-                        std::remove(players[playerIndex].ownedProperties.begin(),
-                            players[playerIndex].ownedProperties.end(),
-                            mostExpensiveProperty),
-                        players[playerIndex].ownedProperties.end()
-                    );
-
-                    int remainingDebt = players[playerIndex].loanAmount - zones[mostExpensiveProperty].price;
-                    if (remainingDebt > 0) {
-                        players[playerIndex].loanAmount = remainingDebt;
-                        updateMessage(L"플레이어 %d의 %s(이)가 압류되었습니다. 남은 빚: $%d",
-                            playerIndex + 1, zones[mostExpensiveProperty].name, remainingDebt);
-                    }
-                    else {
-                        players[playerIndex].loanAmount = 0;
-                        players[playerIndex].isInDebt = false;
-                        updateMessage(L"플레이어 %d의 %s가 압류되어 모든 빚이 상환되었습니다.",
-                            playerIndex + 1, zones[mostExpensiveProperty].name);
-                    }
-                }
-                else {
-                    updateMessage(L"플레이어 %d는 압류할 부동산이 없습니다. 게임 오버!", playerIndex + 1);
-                    resetGame();
-                }
-            }
-
-            // 대출 관련 변수 초기화
-            if (players[playerIndex].loanAmount <= 0) {
-                players[playerIndex].loanTerm = 0;
-                players[playerIndex].isInDebt = false;
-            }
-        }
-        else {
-            updateMessage(L"플레이어 %d의 대출 만기까지 %d턴 남았습니다.", playerIndex + 1, players[playerIndex].loanTerm);
-        }
-    }
-}
 
