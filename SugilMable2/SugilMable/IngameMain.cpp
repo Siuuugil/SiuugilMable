@@ -7,7 +7,7 @@ HWND hToolTip;
 HWND hIngameWnd = nullptr;
 WCHAR messageBuffer[256] = L"";
 WCHAR messageBuffer2[256] = L"";
-const int mapSize = 15;
+const int mapSize = 20;
 const int squareSize = 70;
 const int gapSize = 5;
 int currentPlayer = 0;
@@ -438,7 +438,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
         WCHAR turnText[50];
         swprintf_s(turnText, L"플레이어 %d의 차례입니다. (Money: $%d)", currentPlayer + 1, players[currentPlayer].money);
-        TextOut(hdc, WindowRect.left + 100, WindowRect.top + 400, turnText, lstrlenW(turnText));
+        TextOut(hdc, WindowRect.left + 100, WindowRect.top + 150, turnText, lstrlenW(turnText));
 
         SelectObject(hdc, hBankBrush);
         SelectObject(hdc, hBankPen);
@@ -530,8 +530,8 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 int rent = zones[currentZone].price / 2;
                 players[currentPlayer].money -= rent;
                 players[zones[currentZone].owner].money += rent;
-                updateMessage(L"플레이어 %d가 플레이어 %d에게 $%d의 임대료를 지불했습니다.",
-                    currentPlayer + 1, zones[currentZone].owner + 1, rent);
+                updateMessage(L"플레이어 %d가 $%d의 임대료를 지불했습니다.",
+                    currentPlayer + 1, rent);
             }
         }
 
@@ -617,7 +617,7 @@ void executeLoan(int playerIndex) {
         }
     }
     else {
-        updateMessage(L"플레이어 %d의 보유 금액이 $%d를 초과하여 대출할 수 없습니다.", playerIndex + 1, LOAN_THRESHOLD);
+        updateMessage(L"플레이어 %d의 보유 금액이 $%d를 초과했습니다.", playerIndex + 1, LOAN_THRESHOLD);
     }
 }
 
@@ -686,7 +686,7 @@ void checkLoanStatus(int playerIndex) {
                     int remainingDebt = players[playerIndex].loanAmount - zones[mostExpensiveProperty].price;
                     if (remainingDebt > 0) {
                         players[playerIndex].loanAmount = remainingDebt;
-                        updateMessage(L"플레이어 %d의 %s가 압류되었습니다. 남은 빚: $%d",
+                        updateMessage(L"플레이어 %d의 %s(이)가 압류되었습니다. 남은 빚: $%d",
                             playerIndex + 1, zones[mostExpensiveProperty].name, remainingDebt);
                     }
                     else {
