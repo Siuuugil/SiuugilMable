@@ -1,5 +1,6 @@
 #include "IngameMain.h"
 
+//특수키를 누르면 임대료를 지불하지 않게 
 
 // 전역 변수 정의
 WCHAR szIngameWindowClass[MAX_LOADSTRING] = L"IngameWindowClass";
@@ -10,7 +11,7 @@ WCHAR messageBuffer2[256] = L"";
 const int squareSize = 70; // 맵 사이즈 
 int currentPlayer = 0; //현재 플레이어
 int currentBank = 0; //현재 선택된 은행 <- 플레이어1, 2 각각의 은행 업무 구분을 위해 
-HBITMAP hBackgroundBitmap = NULL;
+
 
 
 //플레이어1 정보 
@@ -304,10 +305,10 @@ void buyProperty(int playerIndex, int zoneIndex) {
         swprintf_s(message, L"%s를 $%d에 구매하시겠습니까?", zones[zoneIndex].name, zones[zoneIndex].price);
 
         if (MessageBox(hIngameWnd, message, L"구매 확인", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-            zones[zoneIndex].owner = playerIndex;
-            players[playerIndex].money -= zones[zoneIndex].price;
-            players[playerIndex].ownedProperties.push_back(zoneIndex);
-            updateMessage(L"플레이어 %d가 %s를 구매했습니다.", playerIndex + 1, zones[zoneIndex].name);
+        zones[zoneIndex].owner = playerIndex;
+        players[playerIndex].money -= zones[zoneIndex].price;
+        players[playerIndex].ownedProperties.push_back(zoneIndex);
+        updateMessage(L"플레이어 %d가 %s를 구매했습니다.", playerIndex + 1, zones[zoneIndex].name);
         }
         else {
             updateMessage(L"플레이어 %d가 %s 구매를 거절했습니다.", playerIndex + 1, zones[zoneIndex].name);
@@ -317,7 +318,6 @@ void buyProperty(int playerIndex, int zoneIndex) {
         updateMessage(L"플레이어 %d가 %s를 구매할 수 없습니다.", playerIndex + 1, zones[zoneIndex].name);
     }
 }
-
 
 // 플레이어의 총 부동산 가치
 int calculatePropertyValue(int playerIndex) {
@@ -492,6 +492,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
     switch (message)
     {
+    
     case WM_COMMAND:
         switch (LOWORD(wParam))
         {
@@ -526,7 +527,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
     
     }
     break;
-
+    
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
@@ -539,12 +540,12 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         GetClientRect(hWnd, &backclientRect);
         FillRect(hdc, &backclientRect, hBackgroundBrush);
         DeleteObject(hBackgroundBrush);
-
+        //배경화면
         const int messageX = 90;
         const int messageY1 = 200;
         const int messageY2 = 230;
-        int guideX = 1200;
-        int guideY = 450;
+        int guideX = 1180;
+        int guideY = 400;
         int lineHeight = 25;
 
         RECT clientRect2;
@@ -552,28 +553,13 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
         SetTextColor(hdc, RGB(0, 0, 0));
         SetBkMode(hdc, TRANSPARENT);
-
-            hBackgroundBitmap = (HBITMAP)LoadImage(NULL, L"earth.jpg", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-            HDC hdcMem = CreateCompatibleDC(hdc);
-            HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBackgroundBitmap);
-
-            BITMAP bm;
-            GetObject(hBackgroundBitmap, sizeof(bm), &bm);
-
-            RECT clientRect;
-            GetClientRect(hWnd, &clientRect);
-
-            StretchBlt(hdc, 0, 0, clientRect.right, clientRect.bottom,
-                hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
-
-            SelectObject(hdcMem, hOldBitmap);
-            DeleteDC(hdcMem);
+        //색깔 
         
         WCHAR gameInstructions[][100] = {
         L"게임 설명:",
         L"클릭 : 주사위 굴리기",
-        L"자유여행 : 비어 있는 땅으로 랜덤 이동",
-        L"랜덤 : 모험을 즐기면서 알아가세요.",
+        L"비행기 : 빈 땅으로 랜덤 이동",
+        L"랜덤 : 모험을 통해 알아가세요.",
         L"북한 : 3턴 간 움직임 제한",
         L"출발! : 월급 $2000 지급",
         L"승리조건 :",
@@ -581,7 +567,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         L"- 상대 플레이어 총 자산 $0",
         L"- 상대 플레이어 보유 금액 $0"
         };
-
+        // 설명 
         int instructionsCount = sizeof(gameInstructions) / sizeof(gameInstructions[0]);
         for (int i = 0; i < instructionsCount; i++) {
             TextOut(hdc,
@@ -590,7 +576,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 gameInstructions[i],
                 lstrlenW(gameInstructions[i]));
         }
-
+        // 텍스트 찍기 
         for (size_t i = 0; i < zones.size(); ++i)
         {
             HBRUSH hZoneBrush = CreateSolidBrush(zones[i].color);
@@ -614,7 +600,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             }
             DeleteObject(hZoneBrush);
         }
-
+        //발판의 주인에 따라 색 변경 
         for (size_t i = 0; i < players.size(); ++i)
         {
             int x = zones[players[i].position].x1 + 5 + (i * 20);
@@ -624,7 +610,7 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             Ellipse(hdc, x, y, x + 20, y + 20);
             DeleteObject(hBrush);
         }
-
+        // 플레이어 말 그리기 
         RECT WindowRect;
         GetClientRect(hWnd, &WindowRect);
         WCHAR turnText[50];
@@ -736,11 +722,20 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 buyProperty(currentPlayer, currentZone);
             }
             else if (zones[currentZone].owner != -1 && zones[currentZone].owner != currentPlayer) {
-                int rent = zones[currentZone].price / 2;
-                players[currentPlayer].money -= rent;
-                players[zones[currentZone].owner].money += rent;
-                updateMessage(L"플레이어 %d가 $%d의 임대료를 지불했습니다.",
-                    currentPlayer + 1, rent);
+                //2차 과제 : 키사용하는 api 호출하고 메시지만 출력. 
+                if (GetAsyncKeyState(VK_SPACE) == TRUE) {
+
+                    updateMessage(L"플레이어 %d가 스페이스바를 사용하여 임대료 지불을 회피했습니다!", currentPlayer + 1);
+                    
+                }
+                else {
+                    
+                    int rent = zones[currentZone].price / 2;
+                    players[currentPlayer].money -= rent;
+                    players[zones[currentZone].owner].money += rent;
+                    updateMessage(L"플레이어 %d가 $%d의 임대료를 지불했습니다.",
+                        currentPlayer + 1, rent);
+                }
             }
         }
 
@@ -751,13 +746,8 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         InvalidateRect(hWnd, NULL, TRUE);
         break;
     }
-    break;
-
-    case WM_DESTROY:
-        if (hBackgroundBitmap)
-        {
-            DeleteObject(hBackgroundBitmap);
-        }
+  
+    case WM_DESTROY: 
         PostQuitMessage(0);
         break;
 
@@ -766,6 +756,8 @@ LRESULT CALLBACK IngameWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
     }
     return 0;
 }
+
+
 
 
 
